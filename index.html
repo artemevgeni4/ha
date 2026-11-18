@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мониторинг 116a VOLT</title>
+    <script src="https://cloudflare.com"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f6f8;
+            color: #222;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+        .top-widget-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            padding: 10px 0;
+        }
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+            text-align: center;
+        }
+        .value-display {
+            font-size: 56px;
+            font-weight: 700;
+            color: #d62020;
+            line-height: 1.1;
+            text-align: center;
+            min-width: 140px;
+            font-variant-numeric: tabular-nums;
+        }
+        .unit-label {
+            font-size: 16px;
+            font-weight: 600;
+            color: #555;
+            margin-top: 2px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            padding: 15px;
+            width: 100%;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 280px;
+        }
+        .status-text {
+            font-size: 11px;
+            color: #888;
+            margin-top: 8px;
+            text-align: center;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="top-widget-area">
+            <div class="card-title">Текущие показания</div>
+            <div class="value-display" id="current-value">---</div>
+            <div class="unit-label">VOLT</div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Динамика (последние 60 значений)</div>
+            <div class="chart-container">
+                <canvas id="sensorChart"></canvas>
+            </div>
+            <div class="status-text" id="last-update">Загрузка данных...</div>
+        </div>
+    </div>
+
+    <script>
+        const CHANNEL_ID = '3585762';
+        const FIELD_NUM = 1;
+        const READ_API_KEY = 'YL11HJZ4W6W2VTMP'; 
+
+        let chart = null;
+
+        if (typeof Chart !== 'undefined') {
+            const ctx = document.getElementById('sensorChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Напряжение (V)',
+                        data: [],
+                        borderColor: '#d62020',
+                        backgroundColor: 'rgba(214, 32, 32, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 2,
+                        tension: 0.2,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { maxTicksLimit: 6, font: { size: 11 } }, grid: { display: false } },
+                        y: { ticks: { font: { size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        async function fetchDataSafely() {
+            const target = new URL('https://thingspeak.com');
+            target.pathname = '/channels/' + CHANNEL_ID + '/feeds.json';
+            target.searchParams.set('api_key', READ_API_KEY);
+            target.searchParams.set('results', '60');
+            const cleanTarget = target.toString();
+
+            const proxy1 = new URL('https://allorigins.win');
+            proxy1.pathname = '/raw';
+            proxy1.searchParams.set('url', cleanTarget);
+
+            const proxy2 = new URL('https://codetabs.com');
+            proxy2.pathname = '/v1/proxy';
+            proxy2.searchParams.set('quest', cleanTarget);
+
+            const urls = [cleanTarget, proxy1.toString(), proxy2.toString()];
+            let log = [];
+
+            for (let i = 0; i < urls.length; i++) {
+                try {
+                    const response = await fetch(urls.at(i));
+                    const text = await response.text();
+                    if (!response.ok) {
+                        log.push('Попытка ' + (i + 1) + ': HTTP ' + response.status);
+                        continue;
+                    }
+                    if (text === '-1' || text === '0') {
+                        log.push('Попытка ' + (i + 1) + ': неверный ключ');
+                        continue;
+                    }
+                    return JSON.parse(text);
+                } catch (e) {
+                    log.push('Попытка ' + (i + 1) + ': ' + e.message);
+                }
+            }
+            throw new Error(log.join(' | '));
+        }
+
+        async function loadData() {
+            const statusEl = document.getElementById('last-update');
+            const valEl = document.getElementById('current-value');
+
+            try {
+                const data = await fetchDataSafely();
+                const feeds = data.feeds;
+
+                if (!feeds || feeds.length === 0) {
+                    statusEl.textContent = 'Канал пуст (нет записей)';
+                    return;
+                }
+
+                const labels = [];
+                const values = [];
+
+                feeds.forEach(function(feed) {
+                    const val = parseFloat(feed['field' + FIELD_NUM]);
+                    if (!isNaN(val)) {
+                        const date = new Date(feed.created_at);
+                        labels.push(date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
+                        values.push(val);
+                    }
+                });
+
+                if (values.length > 0) {
+                    valEl.textContent = values[values.length - 1];
+
+                    if (chart) {
+                        const firstDataset = chart.data.datasets.at(0);
+                        firstDataset.data = values;
+                        chart.data.labels = labels;
+                        chart.update();
+                    }
+
+                    const now = new Date().toLocaleTimeString('ru-RU');
+                    statusEl.textContent = 'Обновлено: ' + now;
+                } else {
+                    const sample = JSON.stringify(feeds.at(feeds.length - 1));
+                    statusEl.textContent = 'В field1 нет цифр. Последняя запись: ' + sample;
+                }
+            } catch (err) {
+                valEl.textContent = 'Ошибка';
+                statusEl.textContent = err.message;
+            }
+        }
+
+        loadData();
+        setInterval(loadData, 15000);
+    </script>
+
+</body>
+</html>

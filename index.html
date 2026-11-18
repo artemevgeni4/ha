@@ -78,12 +78,6 @@
             text-align: center;
             word-break: break-word;
         }
-        .debug-link {
-            display: inline-block;
-            margin-top: 6px;
-            font-size: 11px;
-            color: #0066cc;
-        }
     </style>
 </head>
 <body>
@@ -101,9 +95,6 @@
                 <canvas id="sensorChart"></canvas>
             </div>
             <div class="status-text" id="last-update">Загрузка данных...</div>
-            <div style="text-align: center;">
-                <a id="test-link" class="debug-link" href="#" target="_blank">Проверить ответ сервера напрямую</a>
-            </div>
         </div>
     </div>
 
@@ -112,8 +103,16 @@
         const FIELD_NUM = 1;
         const READ_API_KEY = 'YL11HJZ4W6W2VTMP'; 
 
-        const directUrl = 'https://thingspeak.com' + CHANNEL_ID + '/feeds.json?api_key=' + READ_API_KEY + '&results=60';
-        document.getElementById('test-link').href = directUrl;
+        // Собираем URL по частям, чтобы исключить искажение символов при копировании
+        const SLASH = String.fromCharCode(47);
+        const directUrl = [
+            'https:',
+            '',
+            'api.thingspeak.com',
+            'channels',
+            CHANNEL_ID,
+            'feeds.json?api_key=' + READ_API_KEY + '&results=60'
+        ].join(SLASH);
 
         let chart = null;
 
@@ -192,8 +191,8 @@
 
             const proxyUrls = [
                 directUrl,
-                'https://corsproxy.io?' + encodeURIComponent(directUrl),
-                'https://freeboard.io' + directUrl
+                'https://allorigins.win' + encodeURIComponent(directUrl),
+                'https://codetabs.com' + encodeURIComponent(directUrl)
             ];
 
             let errors = [];

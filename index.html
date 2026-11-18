@@ -93,15 +93,15 @@
             <div class="chart-container">
                 <canvas id="sensorChart"></canvas>
             </div>
-            <div class="status-text" id="last-update">Запрос данных с сервера...</div>
+            <div class="status-text" id="last-update">Ожидание ответа от ThingSpeak...</div>
         </div>
     </div>
 
     <script>
         const CHANNEL_ID = '3585762';
         const FIELD_NUM = 1;
-        // Вставьте ваш Read API Key в кавычки ниже
-        const READ_API_KEY = '7MHNWVVJBNESFNQJ';
+        // Вставьте ваш Read API Key в кавычки ниже, если канал приватный
+        const READ_API_KEY = '7MHNWVVJBNESFNQJ'; 
 
         let chart = null;
 
@@ -134,66 +134,65 @@
             });
         }
 
-        async function fetchThingSpeakData() {
+        // Функция обработки ответа от ThingSpeak (JSONP)
+        window.handleThingSpeakData = function(data) {
             const statusEl = document.getElementById('last-update');
             const valEl = document.getElementById('current-value');
 
-            let url = `https://thingspeak.com{CHANNEL_ID}/fields/${FIELD_NUM}.json?results=60`;
+            if (!data || !data.feeds || data.feeds.length === 0) {
+                statusEl.textContent = 'Канал пуст или нет доступа (проверьте Read API Key)';
+                return;
+            }
+
+            const labels = [];
+            const values = [];
+
+            data.feeds.forEach(feed => {
+                const val = parseFloat(feed[`field${FIELD_NUM}`]);
+                if (!isNaN(val)) {
+                    const date = new Date(feed.created_at);
+                    labels.push(date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
+                    values.push(val);
+                }
+            });
+
+            if (values.length > 0) {
+                valEl.textContent = values[values.length - 1];
+
+                if (chart) {
+                    chart.data.labels = labels;
+                    chart.data.datasets[0].data = values;
+                    chart.update();
+                }
+
+                const now = new Date().toLocaleTimeString('ru-RU');
+                statusEl.textContent = `Обновлено: ${now}`;
+            } else {
+                statusEl.textContent = 'В поле 1 пока нет числовых значений';
+            }
+        };
+
+        function loadDataViaScript() {
+            const oldScript = document.getElementById('ts-jsonp');
+            if (oldScript) oldScript.remove();
+
+            let url = `https://thingspeak.com{CHANNEL_ID}/fields/${FIELD_NUM}.json?results=60&callback=handleThingSpeakData`;
             if (READ_API_KEY.trim() !== '') {
                 url += `&api_key=${READ_API_KEY.trim()}`;
             }
 
-            try {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error(`HTTP код ${response.status}`);
-                }
-                const data = await response.json();
-                const feeds = data.feeds;
-
-                if (!feeds || feeds.length === 0) {
-                    statusEl.textContent = 'Канал пуст (нет записей)';
-                    return;
-                }
-
-                const labels = [];
-                const values = [];
-
-                feeds.forEach(feed => {
-                    const raw = feed[`field${FIELD_NUM}`];
-                    const val = parseFloat(raw);
-                    if (!isNaN(val)) {
-                        const date = new Date(feed.created_at);
-                        labels.push(date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
-                        values.push(val);
-                    }
-                });
-
-                if (values.length > 0) {
-                    valEl.textContent = values[values.length - 1];
-
-                    if (chart) {
-                        chart.data.labels = labels;
-                        chart.data.datasets[0].data = values;
-                        chart.update();
-                    } else {
-                        statusEl.textContent = 'Цифры загружены (библиотека графика заблокирована браузером)';
-                        return;
-                    }
-
-                    const now = new Date().toLocaleTimeString('ru-RU');
-                    statusEl.textContent = `Обновлено: ${now}`;
-                } else {
-                    statusEl.textContent = 'В поле 1 нет числовых значений (только null)';
-                }
-            } catch (error) {
-                valEl.textContent = 'Ошибка';
-                statusEl.textContent = `Сбой: ${error.message}. Проверьте ключ API или отключите блокировщик рекламы.`;
-            }
+            const script = document.createElement('script');
+            script.id = 'ts-jsonp';
+            script.src = url;
+            script.onerror = function() {
+                document.getElementById('current-value').textContent = 'Блок';
+                document.getElementById('last-update').textContent = 'Запрос к ://thingspeak.com заблокирован браузером или провайдером.';
+            };
+            document.body.appendChild(script);
         }
 
-        fetchThingSpeakData();
-        setInterval(fetchThingSpeakData, 15000);
+        loadDataViaScript();
+        setInterval(loadDataViaScript, 15000);
     </script>
 
 </body>

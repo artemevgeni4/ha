@@ -76,6 +76,7 @@
             color: #888;
             margin-top: 8px;
             text-align: center;
+            word-break: break-word;
         }
     </style>
 </head>
@@ -133,38 +134,48 @@
             });
         }
 
-        async function fetchWithFallback(targetUrl) {
-            const proxies = [
-                'https://corsproxy.io' + encodeURIComponent(targetUrl),
-                'https://allorigins.win' + encodeURIComponent(targetUrl),
-                targetUrl
+        async function fetchWithLogs(targetUrl) {
+            const attempts = [
+                { name: 'Direct', url: targetUrl },
+                { name: 'CodeTabs', url: 'https://codetabs.com' + encodeURIComponent(targetUrl) },
+                { name: 'AllOrigins', url: 'https://allorigins.win' + encodeURIComponent(targetUrl) }
             ];
 
-            for (let i = 0; i < proxies.length; i++) {
+            let log = [];
+
+            for (let i = 0; i < attempts.length; i++) {
+                const item = attempts.at(i);
                 try {
-                    const response = await fetch(proxies.at(i));
-                    if (response.ok) {
-                        return await response.json();
+                    const response = await fetch(item.url);
+                    const text = await response.text();
+                    if (!response.ok) {
+                        log.push(item.name + ': HTTP ' + response.status);
+                        continue;
                     }
+                    if (text === '-1' || text === '0') {
+                        log.push(item.name + ': ответ ' + text + ' (неверный ключ)');
+                        continue;
+                    }
+                    return JSON.parse(text);
                 } catch (e) {
-                    // Пробуем следующий адрес из списка
+                    log.push(item.name + ': ' + e.message);
                 }
             }
-            throw new Error('Все каналы связи недоступны');
+            throw new Error(log.join(' | '));
         }
 
         async function loadData() {
             const statusEl = document.getElementById('last-update');
             const valEl = document.getElementById('current-value');
 
-            const targetUrl = 'https://thingspeak.com' + CHANNEL_ID + '/fields/' + FIELD_NUM + '.json?api_key=' + READ_API_KEY + '&results=60';
+            const targetUrl = 'https://thingspeak.com' + CHANNEL_ID + '/feeds.json?api_key=' + READ_API_KEY + '&results=60';
 
             try {
-                const data = await fetchWithFallback(targetUrl);
+                const data = await fetchWithLogs(targetUrl);
                 const feeds = data.feeds;
 
                 if (!feeds || feeds.length === 0) {
-                    statusEl.textContent = 'Канал пуст (нет записей)';
+                    statusEl.textContent = 'Канал пуст (нет записей в feeds)';
                     return;
                 }
 
@@ -193,11 +204,12 @@
                     const now = new Date().toLocaleTimeString('ru-RU');
                     statusEl.textContent = 'Обновлено: ' + now;
                 } else {
-                    statusEl.textContent = 'В поле 1 нет числовых значений';
+                    const sample = JSON.stringify(feeds.at(feeds.length - 1));
+                    statusEl.textContent = 'В field1 нет цифр. Последняя запись: ' + sample;
                 }
             } catch (err) {
                 valEl.textContent = 'Ошибка';
-                statusEl.textContent = 'Детали: ' + err.message;
+                statusEl.textContent = err.message;
             }
         }
 

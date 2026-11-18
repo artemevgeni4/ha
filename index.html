@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мониторинг показаний</title>
+    <title>Мониторинг 116a VOLT</title>
     <script src="https://cloudflare.com"></script>
     <style>
         * {
@@ -100,8 +100,7 @@
     <script>
         const CHANNEL_ID = '3585762';
         const FIELD_NUM = 1;
-        // Вставьте ваш Read API Key в кавычки ниже, если канал приватный
-        const READ_API_KEY = 'LHKUMGC6ICPBBGZD'; 
+        const READ_API_KEY = 'YL11HJZ4W6W2VTMP'; 
 
         let chart = null;
 
@@ -138,15 +137,12 @@
             const statusEl = document.getElementById('last-update');
             const valEl = document.getElementById('current-value');
 
-            let url = 'https://thingspeak.com' + CHANNEL_ID + '/fields/' + FIELD_NUM + '.json?results=60';
-            if (READ_API_KEY.trim() !== '') {
-                url += '&api_key=' + READ_API_KEY.trim();
-            }
+            const url = 'https://thingspeak.com' + CHANNEL_ID + '/fields/' + FIELD_NUM + '.json?api_key=' + READ_API_KEY + '&results=60';
 
             try {
                 const response = await fetch(url);
                 if (!response.ok) {
-                    throw new Error('Сервер вернул код ' + response.status);
+                    throw new Error('Код ответа: ' + response.status);
                 }
                 const data = await response.json();
                 const feeds = data.feeds;
@@ -172,8 +168,9 @@
                     valEl.textContent = values[values.length - 1];
 
                     if (chart) {
+                        const firstDataset = chart.data.datasets.at(0);
+                        firstDataset.data = values;
                         chart.data.labels = labels;
-                        chart.data.datasets[0].data = values;
                         chart.update();
                     }
 

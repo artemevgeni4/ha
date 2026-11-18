@@ -133,18 +133,34 @@
             });
         }
 
+        async function fetchWithFallback(targetUrl) {
+            const proxies = [
+                'https://corsproxy.io' + encodeURIComponent(targetUrl),
+                'https://allorigins.win' + encodeURIComponent(targetUrl),
+                targetUrl
+            ];
+
+            for (let i = 0; i < proxies.length; i++) {
+                try {
+                    const response = await fetch(proxies.at(i));
+                    if (response.ok) {
+                        return await response.json();
+                    }
+                } catch (e) {
+                    // Пробуем следующий адрес из списка
+                }
+            }
+            throw new Error('Все каналы связи недоступны');
+        }
+
         async function loadData() {
             const statusEl = document.getElementById('last-update');
             const valEl = document.getElementById('current-value');
 
-            const url = 'https://thingspeak.com' + CHANNEL_ID + '/fields/' + FIELD_NUM + '.json?api_key=' + READ_API_KEY + '&results=60';
+            const targetUrl = 'https://thingspeak.com' + CHANNEL_ID + '/fields/' + FIELD_NUM + '.json?api_key=' + READ_API_KEY + '&results=60';
 
             try {
-                const response = await fetch(url);
-                if (!response.ok) {
-                    throw new Error('Код ответа: ' + response.status);
-                }
-                const data = await response.json();
+                const data = await fetchWithFallback(targetUrl);
                 const feeds = data.feeds;
 
                 if (!feeds || feeds.length === 0) {

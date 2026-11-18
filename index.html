@@ -134,31 +134,39 @@
             });
         }
 
-        async function fetchWithLogs(targetUrl) {
-            const attempts = [
-                { name: 'Direct', url: targetUrl },
-                { name: 'CodeTabs', url: 'https://codetabs.com' + encodeURIComponent(targetUrl) },
-                { name: 'AllOrigins', url: 'https://allorigins.win' + encodeURIComponent(targetUrl) }
-            ];
+        async function fetchDataSafely() {
+            const target = new URL('https://thingspeak.com');
+            target.pathname = '/channels/' + CHANNEL_ID + '/feeds.json';
+            target.searchParams.set('api_key', READ_API_KEY);
+            target.searchParams.set('results', '60');
+            const cleanTarget = target.toString();
 
+            const proxy1 = new URL('https://allorigins.win');
+            proxy1.pathname = '/raw';
+            proxy1.searchParams.set('url', cleanTarget);
+
+            const proxy2 = new URL('https://codetabs.com');
+            proxy2.pathname = '/v1/proxy';
+            proxy2.searchParams.set('quest', cleanTarget);
+
+            const urls = [cleanTarget, proxy1.toString(), proxy2.toString()];
             let log = [];
 
-            for (let i = 0; i < attempts.length; i++) {
-                const item = attempts.at(i);
+            for (let i = 0; i < urls.length; i++) {
                 try {
-                    const response = await fetch(item.url);
+                    const response = await fetch(urls.at(i));
                     const text = await response.text();
                     if (!response.ok) {
-                        log.push(item.name + ': HTTP ' + response.status);
+                        log.push('Попытка ' + (i + 1) + ': HTTP ' + response.status);
                         continue;
                     }
                     if (text === '-1' || text === '0') {
-                        log.push(item.name + ': ответ ' + text + ' (неверный ключ)');
+                        log.push('Попытка ' + (i + 1) + ': неверный ключ');
                         continue;
                     }
                     return JSON.parse(text);
                 } catch (e) {
-                    log.push(item.name + ': ' + e.message);
+                    log.push('Попытка ' + (i + 1) + ': ' + e.message);
                 }
             }
             throw new Error(log.join(' | '));
@@ -168,14 +176,12 @@
             const statusEl = document.getElementById('last-update');
             const valEl = document.getElementById('current-value');
 
-            const targetUrl = 'https://thingspeak.com' + CHANNEL_ID + '/feeds.json?api_key=' + READ_API_KEY + '&results=60';
-
             try {
-                const data = await fetchWithLogs(targetUrl);
+                const data = await fetchDataSafely();
                 const feeds = data.feeds;
 
                 if (!feeds || feeds.length === 0) {
-                    statusEl.textContent = 'Канал пуст (нет записей в feeds)';
+                    statusEl.textContent = 'Канал пуст (нет записей)';
                     return;
                 }
 

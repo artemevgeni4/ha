@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Мониторинг показаний</title>
-    <script src="https://jsdelivr.net"></script>
+    <script src="https://cloudflare.com"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -82,113 +82,119 @@
 <body>
 
     <div class="container">
-        <!-- Верхний блок: Актуальные показания -->
         <div class="top-widget-area">
             <div class="card-title">Текущие показания</div>
             <div class="value-display" id="current-value">---</div>
             <div class="unit-label">VOLT</div>
         </div>
 
-        <!-- Нижний блок: График -->
         <div class="card">
             <div class="card-title">Динамика (последние 60 значений)</div>
             <div class="chart-container">
                 <canvas id="sensorChart"></canvas>
             </div>
-            <div class="status-text" id="last-update">Загрузка данных...</div>
+            <div class="status-text" id="last-update">Запрос данных с сервера...</div>
         </div>
     </div>
 
     <script>
         const CHANNEL_ID = '3585762';
         const FIELD_NUM = 1;
-        // Вставьте Read API Key в кавычки ниже, если канал приватный
+        // Вставьте ваш Read API Key в кавычки ниже
         const READ_API_KEY = 'YL11HJZ4W6W2VTMP'; 
 
-        const ctx = document.getElementById('sensorChart').getContext('2d');
-        const chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Напряжение (V)',
-                    data: [],
-                    borderColor: '#d62020',
-                    backgroundColor: 'rgba(214, 32, 32, 0.1)',
-                    borderWidth: 2,
-                    pointRadius: 2,
-                    tension: 0.2,
-                    fill: true
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
+        let chart = null;
+
+        if (typeof Chart !== 'undefined') {
+            const ctx = document.getElementById('sensorChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Напряжение (V)',
+                        data: [],
+                        borderColor: '#d62020',
+                        backgroundColor: 'rgba(214, 32, 32, 0.1)',
+                        borderWidth: 2,
+                        pointRadius: 2,
+                        tension: 0.2,
+                        fill: true
+                    }]
                 },
-                scales: {
-                    x: {
-                        ticks: { maxTicksLimit: 6, font: { size: 11 } },
-                        grid: { display: false }
-                    },
-                    y: {
-                        ticks: { font: { size: 11 } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { ticks: { maxTicksLimit: 6, font: { size: 11 } }, grid: { display: false } },
+                        y: { ticks: { font: { size: 11 } } }
                     }
                 }
-            }
-        });
+            });
+        }
 
         async function fetchThingSpeakData() {
+            const statusEl = document.getElementById('last-update');
+            const valEl = document.getElementById('current-value');
+
             let url = `https://thingspeak.com{CHANNEL_ID}/fields/${FIELD_NUM}.json?results=60`;
-            if (READ_API_KEY) {
-                url += `&api_key=${READ_API_KEY}`;
+            if (READ_API_KEY.trim() !== '') {
+                url += `&api_key=${READ_API_KEY.trim()}`;
             }
 
             try {
                 const response = await fetch(url);
-                if (!response.ok) throw new Error('Ошибка доступа к каналу');
+                if (!response.ok) {
+                    throw new Error(`HTTP код ${response.status}`);
+                }
                 const data = await response.json();
                 const feeds = data.feeds;
 
-                if (feeds && feeds.length > 0) {
-                    const labels = [];
-                    const values = [];
+                if (!feeds || feeds.length === 0) {
+                    statusEl.textContent = 'Канал пуст (нет записей)';
+                    return;
+                }
 
-                    feeds.forEach(feed => {
-                        const val = parseFloat(feed[`field${FIELD_NUM}`]);
-                        if (!isNaN(val)) {
-                            const date = new Date(feed.created_at);
-                            const timeStr = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-                            labels.push(timeStr);
-                            values.push(val);
-                        }
-                    });
+                const labels = [];
+                const values = [];
 
-                    if (values.length > 0) {
-                        const latestValue = values[values.length - 1];
-                        document.getElementById('current-value').textContent = latestValue;
+                feeds.forEach(feed => {
+                    const raw = feed[`field${FIELD_NUM}`];
+                    const val = parseFloat(raw);
+                    if (!isNaN(val)) {
+                        const date = new Date(feed.created_at);
+                        labels.push(date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }));
+                        values.push(val);
+                    }
+                });
 
+                if (values.length > 0) {
+                    valEl.textContent = values[values.length - 1];
+
+                    if (chart) {
                         chart.data.labels = labels;
                         chart.data.datasets[0].data = values;
                         chart.update();
-
-                        const now = new Date().toLocaleTimeString('ru-RU');
-                        document.getElementById('last-update').textContent = `Обновлено: ${now}`;
                     } else {
-                        document.getElementById('last-update').textContent = 'Нет числовых данных в канале';
+                        statusEl.textContent = 'Цифры загружены (библиотека графика заблокирована браузером)';
+                        return;
                     }
+
+                    const now = new Date().toLocaleTimeString('ru-RU');
+                    statusEl.textContent = `Обновлено: ${now}`;
                 } else {
-                    document.getElementById('last-update').textContent = 'Канал пуст';
+                    statusEl.textContent = 'В поле 1 нет числовых значений (только null)';
                 }
             } catch (error) {
-                document.getElementById('current-value').textContent = 'Ошибка';
-                document.getElementById('last-update').textContent = 'Проверьте Read API Key или настройки приватности';
+                valEl.textContent = 'Ошибка';
+                statusEl.textContent = `Сбой: ${error.message}. Проверьте ключ API или отключите блокировщик рекламы.`;
             }
         }
 
         fetchThingSpeakData();
         setInterval(fetchThingSpeakData, 15000);
     </script>
+
 </body>
 </html>

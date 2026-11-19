@@ -51,6 +51,7 @@
             text-align: center;
             min-width: 140px;
             font-variant-numeric: tabular-nums;
+            transition: color 0.2s ease;
         }
         .unit-label {
             font-size: 16px;
@@ -103,7 +104,7 @@
     <script>
         const CHANNEL_ID = '3585762';
         const FIELD_NUM = 1;
-        const READ_API_KEY = 'YL11HJZ4W6W2VTMP'; 
+        const READ_API_KEY = 'YL11HJZ4W6W2VTMP';
 
         const SLASH = String.fromCharCode(47);
         const directUrl = [
@@ -115,10 +116,21 @@
             'feeds.json?api_key=' + READ_API_KEY + '&results=60'
         ].join(SLASH);
 
-        function drawSvgChart(values, labels) {
+        function getVoltageColor(voltage) {
+            if (voltage < 180 || voltage >= 245) {
+                return '#d62020'; // Красный: < 180 и >= 245
+            }
+            if (voltage >= 180 && voltage < 200) {
+                return '#e5a000'; // Жёлтый: 180–200
+            }
+            return '#2e8b3c'; // Зелёный: 200–245
+        }
+
+        function drawSvgChart(values, labels, accentColor) {
             const container = document.getElementById('svg-chart');
             if (!values || values.length === 0) return;
 
+            const color = accentColor || '#d62020';
             const width = 500;
             const height = 220;
             const padLeft = 42;
@@ -162,22 +174,18 @@
                 '<svg viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none">',
                 '<defs>',
                 '<linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">',
-                '<stop offset="0%" stop-color="#d62020" stop-opacity="0.25"/>',
-                '<stop offset="100%" stop-color="#d62020" stop-opacity="0.02"/>',
+                '<stop offset="0%" stop-color="' + color + '" stop-opacity="0.25"/>',
+                '<stop offset="100%" stop-color="' + color + '" stop-opacity="0.02"/>',
                 '</linearGradient>',
                 '</defs>',
-                // Горизонтальные линии сетки
                 '<line x1="' + padLeft + '" y1="' + padTop + '" x2="' + lastX + '" y2="' + padTop + '" stroke="#eeeeee" stroke-width="1"/>',
                 '<line x1="' + padLeft + '" y1="' + (padTop + plotH / 2) + '" x2="' + lastX + '" y2="' + (padTop + plotH / 2) + '" stroke="#eeeeee" stroke-width="1"/>',
                 '<line x1="' + padLeft + '" y1="' + bottomY + '" x2="' + lastX + '" y2="' + bottomY + '" stroke="#dddddd" stroke-width="1"/>',
-                // Подписи по оси Y (напряжение)
                 '<text x="' + (padLeft - 6) + '" y="' + (padTop + 4) + '" font-size="11" fill="#888" text-anchor="end">' + maxVal.toFixed(1) + '</text>',
                 '<text x="' + (padLeft - 6) + '" y="' + (padTop + plotH / 2 + 4) + '" font-size="11" fill="#888" text-anchor="end">' + midVal + '</text>',
                 '<text x="' + (padLeft - 6) + '" y="' + (bottomY + 4) + '" font-size="11" fill="#888" text-anchor="end">' + minVal.toFixed(1) + '</text>',
-                // Заливка и линия графика
                 '<polygon points="' + areaPoints + '" fill="url(#grad)"/>',
-                '<polyline fill="none" stroke="#d62020" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="' + points.join(' ') + '"/>',
-                // Подписи по оси X (время)
+                '<polyline fill="none" stroke="' + color + '" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="' + points.join(' ') + '"/>',
                 '<text x="' + padLeft + '" y="' + (height - 4) + '" font-size="11" fill="#888" text-anchor="start">' + startTime + '</text>',
                 '<text x="' + (padLeft + plotW / 2) + '" y="' + (height - 4) + '" font-size="11" fill="#888" text-anchor="middle">' + midTime + '</text>',
                 '<text x="' + lastX + '" y="' + (height - 4) + '" font-size="11" fill="#888" text-anchor="end">' + endTime + '</text>',
@@ -210,8 +218,11 @@
             });
 
             if (values.length > 0) {
-                valEl.textContent = values[values.length - 1];
-                drawSvgChart(values, labels);
+                const latestVoltage = values[values.length - 1];
+                const activeColor = getVoltageColor(latestVoltage);
+                valEl.textContent = latestVoltage;
+                valEl.style.color = activeColor;
+                drawSvgChart(values, labels, activeColor);
 
                 const now = new Date().toLocaleTimeString('ru-RU');
                 statusEl.textContent = 'Обновлено: ' + now;
@@ -242,6 +253,7 @@
             }
 
             valEl.textContent = 'Ошибка';
+            valEl.style.color = '#888888';
             statusEl.textContent = 'Не удалось получить данные';
         }
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мониторинг 116a</title>
+    <title>Мониторинг напряжения 116a</title>
     <style>
         * {
             box-sizing: border-box;
@@ -116,13 +116,10 @@
         ].join(SLASH);
 
         function getVoltageColor(voltage) {
-            if (voltage < 180 || voltage >= 245) {
-                return '#d62020'; // Красный: < 180 и >= 245
+            if (voltage < 190 || voltage >= 245) {
+                return '#d62020'; // Красный: < 190 и >= 245
             }
-            if (voltage >= 180 && voltage < 200) {
-                return '#e5a000'; // Жёлтый: 180–200
-            }
-            return '#2e8b3c'; // Зелёный: 200–245
+            return '#2e8b3c'; // Зелёный: 190–245
         }
 
         function drawSvgChart(values, labels, accentColor) {
